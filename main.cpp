@@ -118,7 +118,6 @@ int main(){
 	// create a few events
 	std::vector<Event> events = {Event(1, "When will Kevin get a gf"), Event(2, "When will Kevin like IgumDrop Post")};
 
-
 	// init games
 	Game game(events);
 
