@@ -1,89 +1,172 @@
+// main.cpp
 // CLI version of two gambits game
 
+/*
+	Each event has an option chain,
+		- Each option is a security and it should have its own ExchangeEngine
+		- Two type of options, different in terms of end game termination process
+
+	Each user has a position, order pending list => same type 
+*/
+
 #include <map>
+#include <queue>
 #include <iostream>
 #include <vector>
-#include <format>
+#include <algorithm>
+#include <string>
+#include <unordered_map>
+#include <memory>    
+#include <cstdio>
 
 #define LOOP for(;;)
-#define OPTION_CHAIN std::map<std::string, Option>
 
+// MACRO ===================================================================================================================================
+template <typename T>
+using ORDER_BOOK = std::map<double, std::queue<T>>; // price => queue {T}
 
-// trade engine
+// basic object classes ====================================================================================================================
+
+// trade engine -------------------------------------------------------------------------------
 template <class T>
 class ExchangeEngine{  // exchange engine for class T
-private:
-	std::map<double, std::pair<std::string, int>> order_book_YES, order_book_NO; // id + amount
+	/*
+		The order can be matched by the same amount of buy and sell of the same security type 
+		or same amount of yes and no whose limit price adds up to 1
+		=> 
+		ExchangeEngine should be 1 per security, contain 4 orderBooks
+	*/
+	ORDER_BOOK<T> orderBookYesSell, orderBookYesBuy;
+	ORDER_BOOK<T> orderBookNoSell, orderBookNoBuy;
 public:
-
+	ExchangeEngine(){}
+	~ExchangeEngine() = default;
 };
 
 
-// Option object
+// Option object -- abstract
 class Option{
-private:
+	// represents a time vertical, contains 2 
 	std::string oid;
 	double price;
 	std::string expiry;
-	ExchangeEngine<Option> exchangeEngine; // each security has its own order book
 public:
 	Option(std::string oid, double price, std::string expiry) : oid(oid), price(price), expiry(expiry) {}
-	~Option() = default;
+	virtual ~Option() = default; 
+
+	virtual Option& finalizePrice() = 0;
+};
+
+// NoOption class - subclass of Option ----------------------------------------
+class NoOption : public Option{
+
+public:
+	NoOption(std::string id, double p, std::string exp) : Option(id, p, exp) {} 
+	~NoOption() override = default;
+
+	Option& finalizePrice() override {
+		return *this;
+	}
 
 };
 
-// Event object
+// YesOption class - subclass of Option --------------------------------------
+class YesOption : public Option{
+
+public:
+	YesOption(std::string id, double p, std::string exp) : Option(id, p, exp) {}
+	~YesOption() override = default;
+
+	Option& finalizePrice() override {
+		return *this;
+	}
+};
+
+#define OPTION_CHAIN std::map<std::string, std::shared_ptr<Option>> // time => Option
+
+// timeVertical class --------------------------------------------------------
+class TimeVertical{
+	ExchangeEngine<std::shared_ptr<Option>> exchangeEngine; // each time frame has its own order book
+	std::string time; // dublicated but whatever
+	OPTION_CHAIN option_chain;
+public:
+	TimeVertical(){}
+	~TimeVertical() = default;
+};
+
+// Position class ---------------------------------------------------------------
+class Position{
+	std::shared_ptr<Option> security;
+	double entry_price;
+	int amount;
+public:
+	Position(){}
+	~Position() = default;
+};
+
+#define POSITIONS std::unordered_map<std::string, std::unordered_map<std::string, Position>> // eid => oid => Position
+
+// Order class ----------------------------------------------------------------------
+class Order{
+	std::shared_ptr<Option> security;
+	double limit;
+	int amount;
+public:
+	Order(){}
+	~Order() = default;
+};
+
+// Event object ---------------------------------------------------------------------
 class Event{ 
-private:
+	/*
+		Each event has an option chain, consist of multiple TimeVertical
+	*/
 	int eid;
 	std::string description;
-	OPTION_CHAIN option_chain; // key:date, val: Option
+	std::map<std::string, TimeVertical> timeVerticals;
 	bool ifEnd = false;
-
 public:
 	Event(int eid, std::string description) : eid(eid), description(description){}
 	~Event() = default;
 
-	int getEid() const {
-		return eid;
-	}
-	std::string getDescription() const {
-		return description;
-	}
-	bool getIfEnd() const {
-		return ifEnd;
-	}
+	int getEid() const { return eid;}
+	std::string getDescription() const { return description;}
+	bool getIfEnd() const {return ifEnd;}
 
 	Event& endEventProcedure(){
 		return *this;
 	}
 
-	Event& addOption(const std::String &date, Option option){
-		option_chain[date] = std::move(option);
-		return *this;
-	}
+	// Event& addOption(const std::string &date, Option option){
+	// 	option_chain[date] = std::move(option);
+	// 	return *this;
+	// }
 
 };
 
-
-
+// user class ==============================================================================================================================
 
 // store users credit left and position
 class User{
-private:
 	double balance = 100000.0;
-	std::map<std::string, std::map<std::string,int>> position; // eid => oid => amount
+	POSITIONS spositions; 
 public:
 	User(){}
 	~User() = default;
 };
 
-// game engine
+// game engine class =======================================================================================================================
+
+
+
+
+
+
+// game engine ----------------------------------------------------------------------------
 class Game{
-private:
 	std::vector<Event> events;
 public:
-	Game(std::vector<Event> events ) : events(events) {}
+	Game(const std::vector<Event>& evts) : events(evts) {}
 	~Game() = default;
 
 	void viewAllEvent() const {
@@ -102,8 +185,9 @@ public:
 	}	
 };
 
+// main ===========================================================================================================================
 
-// command enum
+// command enum --------------------------------------------------------------------------------
 enum Command {VIEW_ALL, VIEW, BUY, SELL, UNKNOWN};
 Command toCommand(const std::string &com){
 	if (com == "viewall") return VIEW_ALL;
@@ -113,10 +197,10 @@ Command toCommand(const std::string &com){
     return UNKNOWN;
 }
 
-
+// main function --------------------------------------------------------------------------------
 int main(){
 	// create a few events
-	std::vector<Event> events = {Event(1, "When will Kevin get a gf"), Event(2, "When will Kevin like IgumDrop Post")};
+	std::vector<Event> events = {Event(1, "When will K get a gf"), Event(2, "When will K like IgumDrop Post")};
 
 	// init games
 	Game game(events);
@@ -130,7 +214,7 @@ int main(){
 	LOOP{
 		// get user info
 		std::string command;
-		std::cout << "Enter command > ";
+		std::cout << "> ";
 		std::cin >> command;
 
 		switch(toCommand(command)){
